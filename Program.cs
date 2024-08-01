@@ -63,38 +63,23 @@ namespace NoahSQL
             {
                 try
                 {
-                    // One multiple select statement
-                    if (!SELECT.Contains(","))
-                    {
-                        listOfSelect.Add(SELECT);
-                    }
+                    // Check if it is single select statement
+                    if (!SELECT.Contains(",")) listOfSelect.Add(SELECT);
 
                     // Check for multiple select statements
                     for (int x = 0; x < splitWords.Length; x++)
                     {
                         if (SELECT.Contains(","))
                         {
-                            if (splitWords[x].Contains(","))
-                            {
-                                listOfSelect.Add(splitWords[x].Replace(",", ""));
-                            }
-                            else if (splitWords[x] == "FROM")
-                            {
-                                listOfSelect.Add(splitWords[x - 1]);
-                            }
+                            if (splitWords[x].Contains(",")) listOfSelect.Add(splitWords[x].Replace(",", ""));
+                            if (splitWords[x] == "FROM") listOfSelect.Add(splitWords[x - 1]);
                         }
 
                         // Check for WHERE operation statement
                         if (WHERE is string)
                         {
-                            if (x == splitWords.Length - 1)
-                            {
-                                oper2 = splitWords[x];
-                            }
-                            if (x == splitWords.Length - 3)
-                            {
-                                oper1 = splitWords[x];
-                            }
+                            if (x == splitWords.Length - 1) oper2 = splitWords[x];
+                            if (x == splitWords.Length - 3) oper1 = splitWords[x];
                         }
                     }
 
@@ -111,32 +96,19 @@ namespace NoahSQL
                         foreach (string select in listOfSelect)
                         {
                             counter = 0;
-
                             foreach (string preDefined in preDefinedValues.values.Keys)
                             {
-                                if (select == preDefined)
-                                {
-                                    idsToSearch.Add(counter, select);
-                                }
+                                if (select == preDefined) idsToSearch.Add(counter, select);
+                                if (preDefined == oper1) oper_id = counter;
                                 counter++;
                             }
                         }
 
-                        counter = 0;
-
-                        foreach (string preDefined in preDefinedValues.values.Keys)
-                        {
-                            if (preDefined == oper1)
-                            {
-                                oper_id = counter;
-                            }
-                            counter++;
-                        }
-
+                        // Skip the predefined values && prepare response message
                         line = await reader.ReadLineAsync();
                         res = new List<Dictionary<string, string>>();
 
-                        // Reading row by row to check for Pattern
+                        // Reading row by row to check for values
                         while ((line = await reader.ReadLineAsync()) != null)
                         {
                             row values = JsonConvert.DeserializeObject<row>(line);
@@ -148,6 +120,7 @@ namespace NoahSQL
                                 if (values.values[oper_id] == oper2)
                                 {
                                     Dictionary<string, string> data = new Dictionary<string, string>();
+                                    
                                     foreach (int id in idsToSearch.Keys)
                                     {
                                         data.Add(idsToSearch[id], values.values[id]);
@@ -159,6 +132,7 @@ namespace NoahSQL
                             else
                             {  
                                 Dictionary<string, string> data = new Dictionary<string, string>();
+                                
                                 foreach (int id in idsToSearch.Keys)
                                 {
                                     data.Add(idsToSearch[id], values.values[id]);
@@ -168,6 +142,7 @@ namespace NoahSQL
                             }
                         }
 
+                        // Converting to string
                         res = JsonConvert.SerializeObject(res);
                     }
                 }
