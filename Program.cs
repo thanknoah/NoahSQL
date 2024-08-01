@@ -633,10 +633,4 @@ namespace NoahSQL
         public Dictionary<string, string> values = new Dictionary<string, string>();
         public List<int> id { get; set; }
     }
-
-    public class resultToSend
-    {
-        public Dictionary<string, string> values = new Dictionary<string, string>();
-    }
-
 }
