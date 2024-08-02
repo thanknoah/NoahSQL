@@ -1,6 +1,6 @@
-BETA V1.3
+BETA V1.4
 
-- Added SELECT command
-- Added response message to commands sent to the server
-- Formatted response message in JSON for SELECT commands sent to the server
-- Huge clean up in code, and more comment
+- Complete Organisation in code
+- More Memory-efficent
+- Refined response model
+- Throttle added to user thread
