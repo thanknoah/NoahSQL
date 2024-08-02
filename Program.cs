@@ -7,11 +7,6 @@ using System.Net.Sockets;
 using System.Threading;
 using System.IO;
 using System.Linq;
-using System.Xml.Linq;
-using System.Reflection.Metadata;
-using System.Diagnostics.Metrics;
-using System.Collections.Generic;
-using System.Security.Cryptography;
 
 namespace NoahSQL
 {
@@ -45,18 +40,17 @@ namespace NoahSQL
         // Important Variables for SQL intrepeter
         static Sys sys = new Sys();
         static Boolean isError = false;
-        static dynamic res;
+        static String res;
+        static String DBName;
+        static String tableName;
+        static String table;
 
-        public static async void searchEngine(string[] splitWords, string DB_NAME, string SELECT, string FROM, string WHERE)
+        public static async void searchEngine(string[] splitWords, string SELECT, string WHERE)
         {
             // Variables
             List<String> listOfSelect = new List<String>();
-            String dir = System.IO.Directory.GetCurrentDirectory();
-            String table = @dir + @"\" + DB_NAME + @"\" + FROM + ".json";
-
-            // Operation
             String oper1 = null;
-            String oper2 = null;
+            dynamic oper2 = null;
             int oper_id = 0;
 
             // Checking if table exists
@@ -64,38 +58,23 @@ namespace NoahSQL
             {
                 try
                 {
-                    // One multiple select statement
-                    if (!SELECT.Contains(","))
-                    {
-                        listOfSelect.Add(SELECT);
-                    }
+                    // Check if it is single select statement
+                    if (!SELECT.Contains(",")) listOfSelect.Add(SELECT);
 
                     // Check for multiple select statements
                     for (int x = 0; x < splitWords.Length; x++)
                     {
                         if (SELECT.Contains(","))
                         {
-                            if (splitWords[x].Contains(","))
-                            {
-                                listOfSelect.Add(splitWords[x].Replace(",", ""));
-                            }
-                            else if (splitWords[x] == "FROM")
-                            {
-                                listOfSelect.Add(splitWords[x - 1]);
-                            }
+                            if (splitWords[x].Contains(",")) listOfSelect.Add(splitWords[x].Replace(",", ""));
+                            if (splitWords[x] == "FROM") listOfSelect.Add(splitWords[x - 1]);
                         }
 
                         // Check for WHERE operation statement
                         if (WHERE is string)
-                        {
-                            if (x == splitWords.Length - 1)
-                            {
-                                oper2 = splitWords[x];
-                            }
-                            if (x == splitWords.Length - 3)
-                            {
-                                oper1 = splitWords[x];
-                            }
+                        { 
+                            if (x == splitWords.Length - 1) oper2 = convertToType(splitWords[x], null);
+                            if (x == splitWords.Length - 3) oper1 = splitWords[x];
                         }
                     }
 
@@ -106,101 +85,80 @@ namespace NoahSQL
                         Dictionary<int, string> idsToSearch = new Dictionary<int, string>();
                         column preDefinedValues = JsonConvert.DeserializeObject<column>(line);
 
-                        int counter = 0;
-
                         // Getting ids to search in database
                         foreach (string select in listOfSelect)
                         {
-                            counter = 0;
-
+                            int counter = 0;
                             foreach (string preDefined in preDefinedValues.values.Keys)
                             {
-                                if (select == preDefined)
-                                {
-                                    idsToSearch.Add(counter, select);
-                                }
+                                if (select == preDefined) idsToSearch.Add(counter, select);
+                                if (preDefined == oper1) oper_id = counter;
                                 counter++;
                             }
                         }
 
-                        counter = 0;
-
-                        foreach (string preDefined in preDefinedValues.values.Keys)
-                        {
-                            if (preDefined == oper1)
-                            {
-                                oper_id = counter;
-                            }
-                            counter++;
-                        }
-
+                        // Skip the predefined values && prepare response message
                         line = await reader.ReadLineAsync();
-                        res = new List<Dictionary<string, string>>();
+                        List<Dictionary<string, dynamic>> responseJson = new List<Dictionary<string, dynamic>>();
 
-                        // Reading row by row to check for Pattern
+                        // Reading row by row to check for values
                         while ((line = await reader.ReadLineAsync()) != null)
                         {
                             row values = JsonConvert.DeserializeObject<row>(line);
                             List<int> indexToSearch = new List<int>();
 
                             // If where condition
-                            if (oper1 is string && oper2 is string)
+                            if (oper1 is string && oper2 != null)
                             {
-                                if (values.values[oper_id] == oper2)
+                                if (System.Object.ReferenceEquals(values.values[oper_id], oper2))
                                 {
-                                    Dictionary<string, string> data = new Dictionary<string, string>();
+                                    Dictionary<string, dynamic> data = new Dictionary<string, dynamic>();
                                     foreach (int id in idsToSearch.Keys)
                                     {
                                         data.Add(idsToSearch[id], values.values[id]);
                                     }
-
-                                    res.Add(data);
+                                    responseJson.Add(data);
                                 }
                             }
                             else
-                            {  
-                                Dictionary<string, string> data = new Dictionary<string, string>();
+                            {
+                                Dictionary<string, dynamic> data = new Dictionary<string, dynamic>();
+
                                 foreach (int id in idsToSearch.Keys)
                                 {
                                     data.Add(idsToSearch[id], values.values[id]);
                                 }
-
-                                res.Add(data);
+                                responseJson.Add(data);
                             }
                         }
 
-                        res = JsonConvert.SerializeObject(res);
+                        // Converting to string
+                        if (!isError) res = JsonConvert.SerializeObject(responseJson);
                     }
                 }
                 catch (Exception e)
                 {
-                    sys.send($"Error retrieving {SELECT} from table {FROM}");
+                    sys.send($"Error retrieving {SELECT} from table {tableName}");
                     sys.send(e.ToString());
-                    res = $"Error retrieving {SELECT} from table {FROM}";
+                    res = $"Error retrieving {SELECT} from table {tableName}";
+
+                    isError = true;
                 }
             }
             else
             {
-                sys.send($"Table {FROM} doesnt exists");
-                res = $"Table {FROM} doesnt exists";
+                sys.send($"Table {tableName} doesnt exists");
+                res = $"Table {tableName} doesnt exists";
             }
         }
 
-        public static void createNewTable(string[] splitWords, string DB_NAME, string tableName)
+        public static void createNewTable(string[] splitWords)
         {
             // Variables
             column json = new column();
             JsonSerializer packagedValue = new JsonSerializer();
-
             Dictionary<string, string> values = new Dictionary<string, string>();
-            Dictionary<string, string> valueAssignment = new Dictionary<string, string>();
             List<int> IDs = new List<int>();
-
-            StringBuilder cleanValue = new StringBuilder();
-            StringBuilder cleanValue2 = new StringBuilder();
-
-            String dir = System.IO.Directory.GetCurrentDirectory();
-            String table = @dir + @"\" + DB_NAME + @"\" + tableName + ".json";
 
             int counter = 0;
 
@@ -214,14 +172,11 @@ namespace NoahSQL
                         if (splitWords[x].Contains("int") || splitWords[x].Contains("str"))
                         {
                             // Filter / Clean out characters
-                            cleanValue = new StringBuilder(splitWords[x]);
-                            cleanValue2 = new StringBuilder(splitWords[x + 1]);
+                            splitWords[x] = splitWords[x].Replace(",", ""); splitWords[x+1] = splitWords[x+1].Replace(",", "");
+                            splitWords[x] = splitWords[x].Replace("(", ""); splitWords[x+1] = splitWords[x+1].Replace(")", "");
+                            splitWords[x] = splitWords[x].Replace(")", ""); splitWords[x+1] = splitWords[x+1].Replace(")", "");
 
-                            cleanValue.Replace(",", ""); cleanValue2.Replace(",", "");
-                            cleanValue.Replace("(", ""); cleanValue2.Replace(")", "");
-                            cleanValue.Replace(")", ""); cleanValue2.Replace(")", "");
-
-                            values.Add(cleanValue2.ToString(), cleanValue.ToString());
+                            values.Add(splitWords[x+1], splitWords[x]);
                             IDs.Add(counter);
 
                             counter++;
@@ -263,31 +218,28 @@ namespace NoahSQL
         }
 
 
-        public static void insertToTable(string DB_NAME, Dictionary<string, string> keyWords, string[] splitWords)
+        public static void insertToTable(Dictionary<string, string> keyWords, string[] splitWords)
         {
             // List of variables
             List<dynamic> valuesToBeAdded = new List<dynamic>();
-            string dir = System.IO.Directory.GetCurrentDirectory();
-
-            String table = @dir + @"\" + DB_NAME + @"\" + keyWords["INTO"] + ".json";
-            StringBuilder cleanValue = new StringBuilder();
 
             if (File.Exists(table))
             {
                 using (StreamWriter sw = File.AppendText(table))
                 {
-                    for (int x = 0; x < splitWords.Length; x++)
+                    for (int x = 1; x < splitWords.Length; x++)
                     {
                         // Cleaning value, and converting it to right value
                         if (splitWords[x].Contains(",") || splitWords[x].Contains("(") || splitWords[x].Contains(")"))
                         {
-                            cleanValue = new StringBuilder(splitWords[x]);
+                            splitWords[x] = splitWords[x].Replace(",", "");
+                            splitWords[x] = splitWords[x].Replace("(", "");
+                            splitWords[x] = splitWords[x].Replace(")", "");
 
-                            cleanValue.Replace(",", "");
-                            cleanValue.Replace("(", "");
-                            cleanValue.Replace(")", "");
+                            dynamic convertedValue = convertToType(splitWords[x], null);
+                            valuesToBeAdded.Add(convertedValue);
 
-                            convertToType(cleanValue.ToString(), DB_NAME, valuesToBeAdded, null);
+                            if (splitWords[x].Contains(")")) break;
                         }
                     }
 
@@ -300,8 +252,8 @@ namespace NoahSQL
 
                         sw.WriteLine(packagedValue);
                         sw.Close();
-
                         valuesToBeAdded.Clear();
+
                         sys.send("Added values to table " + keyWords["INTO"] + "\n");
                         res = "Added values to table " + keyWords["INTO"] + "\n";
                     }
@@ -316,22 +268,23 @@ namespace NoahSQL
             {
                 sys.send(keyWords["INTO"] + " is not a valid table.\n");
                 res = keyWords["INTO"] + " is not a valid table.\n";
+
+                Console.WriteLine(table);
             }
         }
-        public static void convertToType(string type, string table, List<dynamic> valuesToBeAdded, dynamic returnValue)
+        public static dynamic convertToType(string value, dynamic returnValue)
         {
             // Converts to type
             Sys Sys = new Sys();
             String firstReplace = "";
             String secondReplace = "";
-            StringBuilder cleanedValue = new StringBuilder(type);
 
-            if (type.Contains("'"))
+            if (value.Contains("'"))
             {
                 firstReplace = "'";
                 secondReplace = "'";
             }
-            else if (type.Contains("\""))
+            else if (value.Contains("\""))
             {
                 firstReplace = "\"";
                 firstReplace = "\"";
@@ -349,35 +302,33 @@ namespace NoahSQL
                 // Format it to string or int, only supported values.
                 if (firstReplace == "")
                 {
-                    int e = int.Parse(type);
-                    valuesToBeAdded.Add(e);
+                    int convertedToInt = int.Parse(value);
+                    return convertedToInt;
                 }
                 else
                 {
-                    Console.WriteLine(firstReplace);
-                    cleanedValue.Replace(firstReplace, "");
-                    cleanedValue.Replace(secondReplace, "");
-                    valuesToBeAdded.Add(cleanedValue.ToString());
+                    value = value.Replace(firstReplace, "");
+                    value = value.Replace(secondReplace, "");
+                    return value;
                 }
             }
             catch (Exception e)
             {
-                Sys.send($"There was an error with uploading value {valuesToBeAdded} to table {table}. Current supported formats: INT (1,2,3,4) OR STR (\"\" OR '')");
-                res = $"There was an error with uploading value {valuesToBeAdded} to table {table}. Current supported formats: INT (1,2,3,4) OR STR (\"\" OR '')";
+                Sys.send($"There was an error with uploading value {value} to table {tableName}. Current supported formats: INT (1,2,3,4) OR STR (\"\" OR '')");
+                res = $"There was an error with uploading value {value} to table {tableName}. Current supported formats: INT (1,2,3) OR STR (\"\" OR '')";
                 isError = true;
-                valuesToBeAdded.Clear();
+                return null;
             }
 
         }
-        public void query(string q, string DB_NAME, bool distributedFiles)
+        public void query(string query, bool distributedFiles, string DB_name)
         {
-            // Variables
+            // Lexer
             Dictionary<string, string> keyWords = new Dictionary<string, string>();
+            query = query.Replace("--execute", "");
+            string[] splitWords = query.Split(' ');
 
-            q.Replace("--execute", "");
-
-            string[] splitWords = q.Split(' ');
-            string dir = System.IO.Directory.GetCurrentDirectory();
+            DBName = DB_name;
 
             keyWords.Add("SELECT", null);
             keyWords.Add("FROM", null);
@@ -401,6 +352,8 @@ namespace NoahSQL
                     {
                         string NODE_LEFT = splitWords[x + 1];
                         keyWords["FROM"] = NODE_LEFT;
+                        tableName = keyWords["FROM"];
+                        table = System.IO.Directory.GetCurrentDirectory() + @"\" + DBName + @"\" + tableName + ".json";
                     }
                     if (splitWords[x] == "WHERE")
                     {
@@ -417,6 +370,8 @@ namespace NoahSQL
                     {
                         string NODE_LEFT = splitWords[x + 1];
                         keyWords["INTO"] = NODE_LEFT;
+                        tableName = keyWords["INTO"];
+                        table = System.IO.Directory.GetCurrentDirectory() + @"\" + DBName + @"\" + tableName + ".json";
                     }
                     if (splitWords[x] == "CREATE")
                     {
@@ -427,6 +382,8 @@ namespace NoahSQL
                     {
                         string NODE_LEFT = splitWords[x + 1];
                         keyWords["TABLE"] = NODE_LEFT;
+                        tableName = keyWords["TABLE"];
+                        table = System.IO.Directory.GetCurrentDirectory() + @"\" + DBName + @"\" + tableName + ".json";
                     }
                 }
             }
@@ -435,7 +392,7 @@ namespace NoahSQL
             if (keyWords["INSERT"] is string && keyWords["INTO"] is string)
             {
                 var watch = System.Diagnostics.Stopwatch.StartNew();
-                insertToTable(DB_NAME, keyWords, splitWords);
+                insertToTable(keyWords, splitWords);
                 watch.Stop();
                 var elapsedMs = watch.ElapsedMilliseconds;
                 sys.send("Completed in " + elapsedMs + " milliseconds. \n");
@@ -443,7 +400,7 @@ namespace NoahSQL
             else if (keyWords["CREATE"] is string && keyWords["TABLE"] is string)
             {
                 var watch = System.Diagnostics.Stopwatch.StartNew();
-                createNewTable(splitWords, DB_NAME, keyWords["TABLE"]);
+                createNewTable(splitWords);
                 watch.Stop();
                 var elapsedMs = watch.ElapsedMilliseconds;
                 sys.send("Completed in " + elapsedMs + "milliseconds. \n");
@@ -451,7 +408,7 @@ namespace NoahSQL
             else if (keyWords["SELECT"] is string && keyWords["FROM"] is string)
             {
                 var watch = System.Diagnostics.Stopwatch.StartNew();
-                searchEngine(splitWords, DB_NAME, keyWords["SELECT"], keyWords["FROM"], keyWords["WHERE"]);
+                searchEngine(splitWords, keyWords["SELECT"], keyWords["WHERE"]);
                 watch.Stop();
                 var elapsedMs = watch.ElapsedMilliseconds;
                 sys.send("Completed in " + elapsedMs + "milliseconds. \n");
@@ -459,7 +416,6 @@ namespace NoahSQL
         }
         public string returnMsg()
         {
-            Console.WriteLine(res);
             return res;
         }
     }
@@ -516,12 +472,12 @@ namespace NoahSQL
 
                     int received = await ns.ReadAsync(buffer);
                     var message = Encoding.UTF8.GetString(buffer, 0, received);
-                    Console.WriteLine("Request:" + message);
 
                     QueryInputEngine e = new QueryInputEngine();
-                    e.query(message, DB_NAME, true);
-                    byte[] responseBytes = System.Text.Encoding.UTF8.GetBytes(e.returnMsg());
+                    e.query(message, true, DB_NAME);
+                    Thread.Sleep(100);
 
+                    byte[] responseBytes = System.Text.Encoding.UTF8.GetBytes(e.returnMsg());
                     if (responseBytes.ToString() != "") await ns.WriteAsync(responseBytes);
                 }
 
@@ -565,7 +521,7 @@ namespace NoahSQL
                 {
                     Console.WriteLine("\n");
                     QueryInputEngine e = new QueryInputEngine();
-                    e.query(command, DB_NAME, true);
+                    e.query(command, true, DB_NAME);
                 }
             }
         }
@@ -659,10 +615,4 @@ namespace NoahSQL
         public Dictionary<string, string> values = new Dictionary<string, string>();
         public List<int> id { get; set; }
     }
-
-    public class resultToSend
-    {
-        public Dictionary<string, string> values = new Dictionary<string, string>();
-    }
-
 }
