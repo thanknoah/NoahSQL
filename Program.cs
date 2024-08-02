@@ -7,6 +7,11 @@ using System.Net.Sockets;
 using System.Threading;
 using System.IO;
 using System.Linq;
+using System.Xml.Linq;
+using System.Reflection.Metadata;
+using System.Diagnostics.Metrics;
+using System.Collections.Generic;
+using System.Security.Cryptography;
 
 namespace NoahSQL
 {
@@ -72,9 +77,15 @@ namespace NoahSQL
 
                         // Check for WHERE operation statement
                         if (WHERE is string)
-                        { 
-                            if (x == splitWords.Length - 1) oper2 = convertToType(splitWords[x], null);
-                            if (x == splitWords.Length - 3) oper1 = splitWords[x];
+                        {
+                            if (x == splitWords.Length - 1)
+                            {
+                                oper2 = splitWords[x];
+                            }
+                            if (x == splitWords.Length - 3)
+                            {
+                                oper1 = splitWords[x];
+                            }
                         }
                     }
 
@@ -88,7 +99,8 @@ namespace NoahSQL
                         // Getting ids to search in database
                         foreach (string select in listOfSelect)
                         {
-                            int counter = 0;
+                            counter = 0;
+
                             foreach (string preDefined in preDefinedValues.values.Keys)
                             {
                                 if (select == preDefined) idsToSearch.Add(counter, select);
@@ -112,7 +124,7 @@ namespace NoahSQL
                             {
                                 if (System.Object.ReferenceEquals(values.values[oper_id], oper2))
                                 {
-                                    Dictionary<string, dynamic> data = new Dictionary<string, dynamic>();
+                                    Dictionary<string, string> data = new Dictionary<string, string>();
                                     foreach (int id in idsToSearch.Keys)
                                     {
                                         data.Add(idsToSearch[id], values.values[id]);
@@ -121,9 +133,8 @@ namespace NoahSQL
                                 }
                             }
                             else
-                            {
-                                Dictionary<string, dynamic> data = new Dictionary<string, dynamic>();
-
+                            {  
+                                Dictionary<string, string> data = new Dictionary<string, string>();
                                 foreach (int id in idsToSearch.Keys)
                                 {
                                     data.Add(idsToSearch[id], values.values[id]);
@@ -132,8 +143,7 @@ namespace NoahSQL
                             }
                         }
 
-                        // Converting to string
-                        if (!isError) res = JsonConvert.SerializeObject(responseJson);
+                        res = JsonConvert.SerializeObject(res);
                     }
                 }
                 catch (Exception e)
@@ -615,4 +625,10 @@ namespace NoahSQL
         public Dictionary<string, string> values = new Dictionary<string, string>();
         public List<int> id { get; set; }
     }
+
+    public class resultToSend
+    {
+        public Dictionary<string, string> values = new Dictionary<string, string>();
+    }
+
 }
