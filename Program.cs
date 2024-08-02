@@ -1,4 +1,4 @@
-﻿// Imports
+// Imports
 using Newtonsoft.Json;
 using System;
 using System.Text;
@@ -7,11 +7,6 @@ using System.Net.Sockets;
 using System.Threading;
 using System.IO;
 using System.Linq;
-using System.Xml.Linq;
-using System.Reflection.Metadata;
-using System.Diagnostics.Metrics;
-using System.Collections.Generic;
-using System.Security.Cryptography;
 
 namespace NoahSQL
 {
@@ -78,14 +73,8 @@ namespace NoahSQL
                         // Check for WHERE operation statement
                         if (WHERE is string)
                         {
-                            if (x == splitWords.Length - 1)
-                            {
-                                oper2 = splitWords[x];
-                            }
-                            if (x == splitWords.Length - 3)
-                            {
-                                oper1 = splitWords[x];
-                            }
+                            if (x == splitWords.Length - 1) oper2 = convertToType(splitWords[x], null);
+                            if (x == splitWords.Length - 3) oper1 = splitWords[x];
                         }
                     }
 
@@ -99,8 +88,7 @@ namespace NoahSQL
                         // Getting ids to search in database
                         foreach (string select in listOfSelect)
                         {
-                            counter = 0;
-
+                            int counter = 0;
                             foreach (string preDefined in preDefinedValues.values.Keys)
                             {
                                 if (select == preDefined) idsToSearch.Add(counter, select);
@@ -124,7 +112,7 @@ namespace NoahSQL
                             {
                                 if (System.Object.ReferenceEquals(values.values[oper_id], oper2))
                                 {
-                                    Dictionary<string, string> data = new Dictionary<string, string>();
+                                    Dictionary<string, dynamic> data = new Dictionary<string, dynamic>();
                                     foreach (int id in idsToSearch.Keys)
                                     {
                                         data.Add(idsToSearch[id], values.values[id]);
@@ -133,8 +121,9 @@ namespace NoahSQL
                                 }
                             }
                             else
-                            {  
-                                Dictionary<string, string> data = new Dictionary<string, string>();
+                            {
+                                Dictionary<string, dynamic> data = new Dictionary<string, dynamic>();
+
                                 foreach (int id in idsToSearch.Keys)
                                 {
                                     data.Add(idsToSearch[id], values.values[id]);
@@ -143,7 +132,8 @@ namespace NoahSQL
                             }
                         }
 
-                        res = JsonConvert.SerializeObject(res);
+                        // Converting to string
+                        if (!isError) res = JsonConvert.SerializeObject(responseJson);
                     }
                 }
                 catch (Exception e)
@@ -182,11 +172,11 @@ namespace NoahSQL
                         if (splitWords[x].Contains("int") || splitWords[x].Contains("str"))
                         {
                             // Filter / Clean out characters
-                            splitWords[x] = splitWords[x].Replace(",", ""); splitWords[x+1] = splitWords[x+1].Replace(",", "");
-                            splitWords[x] = splitWords[x].Replace("(", ""); splitWords[x+1] = splitWords[x+1].Replace(")", "");
-                            splitWords[x] = splitWords[x].Replace(")", ""); splitWords[x+1] = splitWords[x+1].Replace(")", "");
+                            splitWords[x] = splitWords[x].Replace(",", ""); splitWords[x + 1] = splitWords[x + 1].Replace(",", "");
+                            splitWords[x] = splitWords[x].Replace("(", ""); splitWords[x + 1] = splitWords[x + 1].Replace(")", "");
+                            splitWords[x] = splitWords[x].Replace(")", ""); splitWords[x + 1] = splitWords[x + 1].Replace(")", "");
 
-                            values.Add(splitWords[x+1], splitWords[x]);
+                            values.Add(splitWords[x + 1], splitWords[x]);
                             IDs.Add(counter);
 
                             counter++;
@@ -625,10 +615,4 @@ namespace NoahSQL
         public Dictionary<string, string> values = new Dictionary<string, string>();
         public List<int> id { get; set; }
     }
-
-    public class resultToSend
-    {
-        public Dictionary<string, string> values = new Dictionary<string, string>();
-    }
-
 }
