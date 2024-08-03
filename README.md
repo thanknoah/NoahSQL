@@ -1,6 +1,5 @@
-BETA V1.4
+BETA V1.5
 
-- Complete Organisation in code
-- More Memory-efficent
-- Refined response model
-- Throttle added to user thread
+- Bug fixes 
+- Optimisation for speed
+- Been tested with 15k users per second
