@@ -475,9 +475,9 @@ namespace NoahSQL
 
                     QueryInputEngine e = new QueryInputEngine();
                     e.query(message, true, DB_NAME);
-                    Thread.Sleep(100);
+                    string result = await Task.Run(() => e.returnMsg());
 
-                    byte[] responseBytes = System.Text.Encoding.UTF8.GetBytes(e.returnMsg());
+                    byte[] responseBytes = System.Text.Encoding.UTF8.GetBytes(result);
                     if (responseBytes.ToString() != "") await ns.WriteAsync(responseBytes);
                 }
 
