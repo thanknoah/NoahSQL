@@ -1,6 +1,5 @@
-BETA V1.5
+BETA V1.6
 
-- Bug fixes 
-- Optimisation for speed
-- Been tested with 15k users per second
-- Been tested with over 500k lines of data
+- Clean up in code
+- Improved readability massively
+- Increase peformance
