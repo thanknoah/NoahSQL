@@ -48,10 +48,10 @@ namespace NoahSQL
         public static async void searchEngine(string[] splitWords, string SELECT, string WHERE)
         {
             // Variables
-            List<String> listOfSelect = new List<String>();
-            String oper1 = null;
-            dynamic oper2 = null;
-            int oper_id = 0;
+            List<String> selectStatements = new List<String>();
+            string firstOperation = null;
+            dynamic secondOperation = null;
+            int firstOperationElement = 0;
 
             // Checking if table exists
             if (File.Exists(table))
@@ -59,22 +59,22 @@ namespace NoahSQL
                 try
                 {
                     // Check if it is single select statement
-                    if (!SELECT.Contains(",")) listOfSelect.Add(SELECT);
+                    if (!SELECT.Contains(",")) selectStatements.Add(SELECT);
 
                     // Check for multiple select statements
                     for (int x = 0; x < splitWords.Length; x++)
                     {
                         if (SELECT.Contains(","))
                         {
-                            if (splitWords[x].Contains(",")) listOfSelect.Add(splitWords[x].Replace(",", ""));
-                            if (splitWords[x] == "FROM") listOfSelect.Add(splitWords[x - 1]);
+                            if (splitWords[x].Contains(",")) selectStatements.Add(splitWords[x].Replace(",", ""));
+                            if (splitWords[x] == "FROM") selectStatements.Add(splitWords[x - 1]);
                         }
 
                         // Check for WHERE operation statement
                         if (WHERE is string)
                         {
-                            if (x == splitWords.Length - 1) oper2 = convertToType(splitWords[x], null);
-                            if (x == splitWords.Length - 3) oper1 = splitWords[x];
+                            if (x == splitWords.Length - 1) secondOperation = convertToType(splitWords[x], null);
+                            if (x == splitWords.Length - 3) firstOperation = splitWords[x];
                         }
                     }
 
@@ -82,18 +82,18 @@ namespace NoahSQL
                     using (StreamReader reader = new StreamReader(table))
                     {
                         string line = await reader.ReadLineAsync();
-                        Dictionary<int, string> idsToSearch = new Dictionary<int, string>();
                         column preDefinedValues = JsonConvert.DeserializeObject<column>(line);
+                        Dictionary<int, string> elementsToSearch = new Dictionary<int, string>();
 
-                        // Getting ids to search in database
-                        foreach (string select in listOfSelect)
+                        // Getting elements to search in each line of database
+                        foreach (string select in selectStatements)
                         {
-                            int counter = 0;
+                            int i = 0;
                             foreach (string preDefined in preDefinedValues.values.Keys)
                             {
-                                if (select == preDefined) idsToSearch.Add(counter, select);
-                                if (preDefined == oper1) oper_id = counter;
-                                counter++;
+                                if (select == preDefined) elementsToSearch.Add(i, select);
+                                if (preDefined == firstOperation) firstOperationElement = i;
+                                i++;
                             }
                         }
 
@@ -108,27 +108,26 @@ namespace NoahSQL
                             List<int> indexToSearch = new List<int>();
 
                             // If where condition
-                            if (oper1 is string && oper2 != null)
+                            if (firstOperation is string && secondOperation != null)
                             {
-                                if (System.Object.ReferenceEquals(values.values[oper_id], oper2))
+                                if (System.Object.ReferenceEquals(values.values[firstOperationElement], secondOperation))
                                 {
-                                    Dictionary<string, dynamic> data = new Dictionary<string, dynamic>();
-                                    foreach (int id in idsToSearch.Keys)
+                                    Dictionary<string, dynamic> lineJson = new Dictionary<string, dynamic>();
+                                    foreach (int id in elementsToSearch.Keys)
                                     {
-                                        data.Add(idsToSearch[id], values.values[id]);
+                                        lineJson.Add(elementsToSearch[id], values.values[id]);
                                     }
-                                    responseJson.Add(data);
+                                    responseJson.Add(lineJson);
                                 }
                             }
                             else
                             {
-                                Dictionary<string, dynamic> data = new Dictionary<string, dynamic>();
-
-                                foreach (int id in idsToSearch.Keys)
+                                Dictionary<string, dynamic> lineJson = new Dictionary<string, dynamic>();
+                                foreach (int id in elementsToSearch.Keys)
                                 {
-                                    data.Add(idsToSearch[id], values.values[id]);
+                                    lineJson.Add(elementsToSearch[id], values.values[id]);
                                 }
-                                responseJson.Add(data);
+                                responseJson.Add(lineJson);
                             }
                         }
 
@@ -155,19 +154,19 @@ namespace NoahSQL
         public static void createNewTable(string[] splitWords)
         {
             // Variables
-            column json = new column();
             JsonSerializer packagedValue = new JsonSerializer();
-            Dictionary<string, string> values = new Dictionary<string, string>();
+            Dictionary<string, string> preDefinedValues = new Dictionary<string, string>();
             List<int> IDs = new List<int>();
+            column json = new column();
 
-            int counter = 0;
+            int i = 0;
 
             // Checking if table exists
             if (!File.Exists(table))
             {
                 try
                 {
-                    for (int x = 0; x < splitWords.Length; x++)
+                    for (int x = 2; x < splitWords.Length; x++)
                     {
                         if (splitWords[x].Contains("int") || splitWords[x].Contains("str"))
                         {
@@ -176,15 +175,15 @@ namespace NoahSQL
                             splitWords[x] = splitWords[x].Replace("(", ""); splitWords[x + 1] = splitWords[x + 1].Replace(")", "");
                             splitWords[x] = splitWords[x].Replace(")", ""); splitWords[x + 1] = splitWords[x + 1].Replace(")", "");
 
-                            values.Add(splitWords[x + 1], splitWords[x]);
-                            IDs.Add(counter);
+                            preDefinedValues.Add(splitWords[x + 1], splitWords[x]);
+                            IDs.Add(i);
 
-                            counter++;
+                            i++;
                         }
                     }
 
                     // Prepare JSON in package and insert the values into the newly created table
-                    json.values = values;
+                    json.values = preDefinedValues;
                     json.id = IDs;
 
                     packagedValue = new JsonSerializer();
@@ -225,9 +224,9 @@ namespace NoahSQL
 
             if (File.Exists(table))
             {
-                using (StreamWriter sw = File.AppendText(table))
+                using (StreamWriter file = File.AppendText(table))
                 {
-                    for (int x = 1; x < splitWords.Length; x++)
+                    for (int x = 1; x < splitWords.Length-2; x++)
                     {
                         // Cleaning value, and converting it to right value
                         if (splitWords[x].Contains(",") || splitWords[x].Contains("(") || splitWords[x].Contains(")"))
@@ -250,8 +249,8 @@ namespace NoahSQL
                         json.values = valuesToBeAdded;
                         var packagedValue = JsonConvert.SerializeObject(json);
 
-                        sw.WriteLine(packagedValue);
-                        sw.Close();
+                        file.WriteLine(packagedValue);
+                        file.Close();
                         valuesToBeAdded.Clear();
 
                         sys.send("Added values to table " + keyWords["INTO"] + "\n");
@@ -260,7 +259,7 @@ namespace NoahSQL
                     else
                     {
                         valuesToBeAdded.Clear();
-                        sw.Close();
+                        file.Close();
                     }
                 }
             }
