@@ -58,10 +58,9 @@ namespace NoahSQL
             {
                 try
                 {
-                    // Check if it is single select statement
+                    // Check if it is single select statement && Check for multiple select statements
                     if (!SELECT.Contains(",")) selectStatements.Add(SELECT);
-
-                    // Check for multiple select statements
+                    
                     for (int x = 0; x < splitWords.Length; x++)
                     {
                         if (SELECT.Contains(","))
@@ -69,8 +68,6 @@ namespace NoahSQL
                             if (splitWords[x].Contains(",")) selectStatements.Add(splitWords[x].Replace(",", ""));
                             if (splitWords[x] == "FROM") selectStatements.Add(splitWords[x - 1]);
                         }
-
-                        // Check for WHERE operation statement
                         if (WHERE is string)
                         {
                             if (x == splitWords.Length - 1) secondOperation = convertToType(splitWords[x], null);
@@ -158,7 +155,7 @@ namespace NoahSQL
             Dictionary<string, string> preDefinedValues = new Dictionary<string, string>();
             List<int> IDs = new List<int>();
             column json = new column();
-
+            
             int i = 0;
 
             // Checking if table exists
