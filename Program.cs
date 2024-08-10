@@ -99,10 +99,6 @@ namespace NoahSQL
                             {
                                 Console.WriteLine(values.values[firstOperationElement] + ": " + secondOperation);
                                 writer.WriteLine(line);
-                            } else
-                            {
-                                Console.WriteLine("Ok so");
-                                Console.WriteLine(values.values[firstOperationElement] + ": " + secondOperation);
                             }
                         }
                     }
