@@ -97,7 +97,6 @@ namespace NoahSQL
                             }
                             if (values.values[firstOperationElement] != secondOperation)
                             {
-                                Console.WriteLine(values.values[firstOperationElement] + ": " + secondOperation);
                                 writer.WriteLine(line);
                             }
                         }
@@ -160,7 +159,7 @@ namespace NoahSQL
                     }
 
                     // Read file
-                    using (StreamReader reader = new StreamReader(new FileStream(table, FileMode.Open, FileAccess.Read, FileShare.None)))
+                    using (StreamReader reader = new StreamReader(table))
                     {
                         string line = await reader.ReadLineAsync();
                         column preDefinedValues = JsonConvert.DeserializeObject<column>(line);
@@ -307,9 +306,9 @@ namespace NoahSQL
 
             if (File.Exists(table))
             {
-                using (var fileStream = new FileStream(table, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None))
+                using (StreamWriter file = File.AppendText(table))
                 {
-                    for (int x = 1; x < splitWords.Length-2; x++)
+                    for (int x = 1; x < splitWords.Length - 2; x++)
                     {
                         // Cleaning value, and converting it to right value
                         if (splitWords[x].Contains(",") || splitWords[x].Contains("(") || splitWords[x].Contains(")"))
@@ -332,13 +331,10 @@ namespace NoahSQL
                         json.values = valuesToBeAdded;
                         var packagedValue = JsonConvert.SerializeObject(json);
 
-                        fileStream.Seek(0, SeekOrigin.End);
-                        using (var writer = new StreamWriter(fileStream))
-                        {
-                            writer.WriteLine(packagedValue);
-                        }
+                        file.WriteLine(packagedValue);
+                        file.Close();                      
                         valuesToBeAdded.Clear();
-
+                            
                         sys.send("Added values to table " + keyWords["INTO"]);
                         res = "Added values to table " + keyWords["INTO"] + "\n";
                     }
