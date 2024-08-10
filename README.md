@@ -1,5 +1,5 @@
-BETA V1.6
+BETA V1.7
 
-- Clean up in code
-- Improved readability massively
-- Increase peformance
+- Added DELETE functions to tables
+- Added a lock file system
+- Fixed a bug to do with SELECT statement
