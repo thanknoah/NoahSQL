@@ -7,6 +7,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.IO;
 using System.Linq;
+using Microsoft.CSharp.RuntimeBinder;
 
 namespace NoahSQL
 {
@@ -45,6 +46,90 @@ namespace NoahSQL
         static String tableName;
         static String table;
 
+        public static async void deleteFromTable(string[] splitWords, string WHERE)
+        {
+            // Variables
+            string firstOperation = null;
+            dynamic secondOperation = null;
+            int firstOperationElement = 0;
+            int index = 0;
+
+            // Checking if table exists
+            if (File.Exists(table))
+            {
+                try
+                {
+                    // Checking for WHERE Statements
+                    if (WHERE is string)
+                    {
+                        firstOperation = splitWords[splitWords.Length - 3];
+                        secondOperation = convertToType(splitWords[splitWords.Length - 1], null);
+
+                        Console.WriteLine(firstOperation, secondOperation);
+                    }
+
+                    // Reading file
+                    string tempFilePath = Path.GetTempFileName();
+                    using (StreamReader reader = new StreamReader(new FileStream(table, FileMode.Open, FileAccess.Read, FileShare.None)))
+                    using (var writer = new StreamWriter(new FileStream(tempFilePath, FileMode.Create, FileAccess.Write, FileShare.None)))
+                    {
+                        string line = await reader.ReadLineAsync();
+                        column preDefinedValues = JsonConvert.DeserializeObject<column>(line);
+                        Dictionary<int, string> elementsToSearch = new Dictionary<int, string>();
+
+                        // Getting elements to search in each line of database
+                        foreach (string preDefined in preDefinedValues.values.Keys)
+                        {
+                            if (preDefined == firstOperation) firstOperationElement = index;
+                            index++;
+                        }
+                        writer.WriteLine(line);
+                        line = await reader.ReadLineAsync();
+
+                        // Reading row by row to check for values
+                        while ((line = await reader.ReadLineAsync()) != null)
+                        {
+                            row values = JsonConvert.DeserializeObject<row>(line);
+
+                            if (firstOperation is not string || secondOperation == null)
+                            {
+                                break;
+                            }
+                            if (values.values[firstOperationElement] != secondOperation)
+                            {
+                                Console.WriteLine(values.values[firstOperationElement] + ": " + secondOperation);
+                                writer.WriteLine(line);
+                            } else
+                            {
+                                Console.WriteLine("Ok so");
+                                Console.WriteLine(values.values[firstOperationElement] + ": " + secondOperation);
+                            }
+                        }
+                    }
+
+                    File.Delete(table);
+                    File.Move(tempFilePath, table);
+                }
+                catch (RuntimeBinderException ex)
+                {
+                    res = JsonConvert.SerializeObject("{}");
+                }
+                catch (Exception e)
+                {
+                    sys.send($"Error deleting from table {tableName}");
+                    sys.send(e.ToString());
+                    res = $"Error retrieving from table {tableName}";
+
+                    isError = true;
+                }
+
+            } else
+            {
+                sys.send($"Table {tableName} doesnt exists");
+                res = $"Table {tableName} doesnt exists";
+            }
+        }
+
         public static async void searchEngine(string[] splitWords, string SELECT, string WHERE)
         {
             // Variables
@@ -58,9 +143,10 @@ namespace NoahSQL
             {
                 try
                 {
-                    // Check if it is single select statement && Check for multiple select statements
+                    // Check if it is single select statement
                     if (!SELECT.Contains(",")) selectStatements.Add(SELECT);
-                    
+
+                    // Check for multiple select statements
                     for (int x = 0; x < splitWords.Length; x++)
                     {
                         if (SELECT.Contains(","))
@@ -68,6 +154,8 @@ namespace NoahSQL
                             if (splitWords[x].Contains(",")) selectStatements.Add(splitWords[x].Replace(",", ""));
                             if (splitWords[x] == "FROM") selectStatements.Add(splitWords[x - 1]);
                         }
+
+                        // Check for WHERE operation statement
                         if (WHERE is string)
                         {
                             if (x == splitWords.Length - 1) secondOperation = convertToType(splitWords[x], null);
@@ -76,7 +164,7 @@ namespace NoahSQL
                     }
 
                     // Read file
-                    using (StreamReader reader = new StreamReader(table))
+                    using (StreamReader reader = new StreamReader(new FileStream(table, FileMode.Open, FileAccess.Read, FileShare.None)))
                     {
                         string line = await reader.ReadLineAsync();
                         column preDefinedValues = JsonConvert.DeserializeObject<column>(line);
@@ -85,12 +173,12 @@ namespace NoahSQL
                         // Getting elements to search in each line of database
                         foreach (string select in selectStatements)
                         {
-                            int i = 0;
+                            int index = 0;
                             foreach (string preDefined in preDefinedValues.values.Keys)
                             {
-                                if (select == preDefined) elementsToSearch.Add(i, select);
-                                if (preDefined == firstOperation) firstOperationElement = i;
-                                i++;
+                                if (select == preDefined) elementsToSearch.Add(index, select);
+                                if (preDefined == firstOperation) firstOperationElement = index;
+                                index++;
                             }
                         }
 
@@ -102,17 +190,16 @@ namespace NoahSQL
                         while ((line = await reader.ReadLineAsync()) != null)
                         {
                             row values = JsonConvert.DeserializeObject<row>(line);
-                            List<int> indexToSearch = new List<int>();
+                            dynamic indivisualValue = values.values[firstOperationElement];
 
-                            // If where condition
                             if (firstOperation is string && secondOperation != null)
                             {
-                                if (System.Object.ReferenceEquals(values.values[firstOperationElement], secondOperation))
+                                if (indivisualValue == secondOperation)
                                 {
                                     Dictionary<string, dynamic> lineJson = new Dictionary<string, dynamic>();
                                     foreach (int id in elementsToSearch.Keys)
                                     {
-                                        lineJson.Add(elementsToSearch[id], values.values[id]);
+                                        lineJson.Add(elementsToSearch[id], indivisualValue);
                                     }
                                     responseJson.Add(lineJson);
                                 }
@@ -122,7 +209,7 @@ namespace NoahSQL
                                 Dictionary<string, dynamic> lineJson = new Dictionary<string, dynamic>();
                                 foreach (int id in elementsToSearch.Keys)
                                 {
-                                    lineJson.Add(elementsToSearch[id], values.values[id]);
+                                    lineJson.Add(elementsToSearch[id], indivisualValue);
                                 }
                                 responseJson.Add(lineJson);
                             }
@@ -131,6 +218,10 @@ namespace NoahSQL
                         // Converting to string
                         if (!isError) res = JsonConvert.SerializeObject(responseJson);
                     }
+                }
+                catch (RuntimeBinderException ex)
+                {
+                    res = JsonConvert.SerializeObject("{}");
                 }
                 catch (Exception e)
                 {
@@ -155,7 +246,7 @@ namespace NoahSQL
             Dictionary<string, string> preDefinedValues = new Dictionary<string, string>();
             List<int> IDs = new List<int>();
             column json = new column();
-            
+
             int i = 0;
 
             // Checking if table exists
@@ -200,9 +291,8 @@ namespace NoahSQL
                     {
                         packagedValue.Serialize(file, json);
                         file.WriteLineAsync("\n");
-                        file.Close();
                     }
-                    sys.send("Created Table " + tableName + " and inserted values. \n");
+                    sys.send("Created Table " + tableName + " and inserted values.");
                     res = "Created Table " + tableName + " and inserted values. \n";
                 }
             }
@@ -221,7 +311,7 @@ namespace NoahSQL
 
             if (File.Exists(table))
             {
-                using (StreamWriter file = File.AppendText(table))
+                using (var fileStream = new FileStream(table, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None))
                 {
                     for (int x = 1; x < splitWords.Length-2; x++)
                     {
@@ -246,29 +336,31 @@ namespace NoahSQL
                         json.values = valuesToBeAdded;
                         var packagedValue = JsonConvert.SerializeObject(json);
 
-                        file.WriteLine(packagedValue);
-                        file.Close();
+                        fileStream.Seek(0, SeekOrigin.End);
+                        using (var writer = new StreamWriter(fileStream))
+                        {
+                            writer.WriteLine(packagedValue);
+                        }
                         valuesToBeAdded.Clear();
 
-                        sys.send("Added values to table " + keyWords["INTO"] + "\n");
+                        sys.send("Added values to table " + keyWords["INTO"]);
                         res = "Added values to table " + keyWords["INTO"] + "\n";
                     }
                     else
                     {
                         valuesToBeAdded.Clear();
-                        file.Close();
                     }
                 }
             }
             else
             {
-                sys.send(keyWords["INTO"] + " is not a valid table.\n");
+                sys.send(keyWords["INTO"] + " is not a valid table");
                 res = keyWords["INTO"] + " is not a valid table.\n";
 
                 Console.WriteLine(table);
             }
         }
-        public static dynamic convertToType(string value, dynamic returnValue)
+        public static dynamic convertToType(String value, dynamic returnValue)
         {
             // Converts to type
             Sys Sys = new Sys();
@@ -327,6 +419,7 @@ namespace NoahSQL
             DBName = DB_name;
 
             keyWords.Add("SELECT", null);
+            keyWords.Add("DELETE", null);
             keyWords.Add("FROM", null);
             keyWords.Add("WHERE", null);
             keyWords.Add("INSERT", null);
@@ -343,6 +436,11 @@ namespace NoahSQL
                     {
                         string NODE_LEFT = splitWords[x + 1];
                         keyWords["SELECT"] = NODE_LEFT;
+                    }
+                    if (splitWords[x] == "DELETE")
+                    {
+                        string NODE_LEFT = splitWords[x + 1];
+                        keyWords["DELETE"] = NODE_LEFT;
                     }
                     if (splitWords[x] == "FROM")
                     {
@@ -405,6 +503,14 @@ namespace NoahSQL
             {
                 var watch = System.Diagnostics.Stopwatch.StartNew();
                 searchEngine(splitWords, keyWords["SELECT"], keyWords["WHERE"]);
+                watch.Stop();
+                var elapsedMs = watch.ElapsedMilliseconds;
+                sys.send("Completed in " + elapsedMs + "milliseconds. \n");
+            }
+            else if (keyWords["DELETE"] is string && keyWords["FROM"] is string)
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                deleteFromTable(splitWords, keyWords["WHERE"]);
                 watch.Stop();
                 var elapsedMs = watch.ElapsedMilliseconds;
                 sys.send("Completed in " + elapsedMs + "milliseconds. \n");
