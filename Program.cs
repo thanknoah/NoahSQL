@@ -8,6 +8,7 @@ using System.Threading;
 using System.IO;
 using System.Linq;
 using Microsoft.CSharp.RuntimeBinder;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace NoahSQL
 {
@@ -45,6 +46,7 @@ namespace NoahSQL
         static String DBName;
         static String tableName;
         static String table;
+        private static SemaphoreSlim semaphore = new SemaphoreSlim(1, 1);
 
         public static async void deleteFromTable(string[] splitWords, string WHERE)
         {
@@ -53,6 +55,7 @@ namespace NoahSQL
             dynamic secondOperation = null;
             int firstOperationElement = 0;
             int index = 0;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
 
             // Checking if table exists
             if (File.Exists(table))
@@ -69,6 +72,7 @@ namespace NoahSQL
                     }
 
                     // Reading file
+                    await semaphore.WaitAsync();
                     string tempFilePath = Path.GetTempFileName();
                     using (StreamReader reader = new StreamReader(new FileStream(table, FileMode.Open, FileAccess.Read, FileShare.None)))
                     using (var writer = new StreamWriter(new FileStream(tempFilePath, FileMode.Create, FileAccess.Write, FileShare.None)))
@@ -116,6 +120,13 @@ namespace NoahSQL
                     res = $"Error retrieving from table {tableName}";
 
                     isError = true;
+                }
+                finally
+                {
+                    semaphore.Release();
+                    watch.Stop();
+                    var elapsedMs = watch.ElapsedMilliseconds;
+                    sys.send("Completed in " + elapsedMs + " milliseconds. \n");
                 }
 
             } else
@@ -287,7 +298,7 @@ namespace NoahSQL
                         packagedValue.Serialize(file, json);
                         file.WriteLineAsync("\n");
                     }
-                    sys.send("Created Table " + tableName + " and inserted values.");
+                    sys.send("Created Table " + tableName + " and inserted values.\n");
                     res = "Created Table " + tableName + " and inserted values. \n";
                 }
             }
@@ -299,49 +310,66 @@ namespace NoahSQL
         }
 
 
-        public static void insertToTable(Dictionary<string, string> keyWords, string[] splitWords)
+        public async static void insertToTable(Dictionary<string, string> keyWords, string[] splitWords)
         {
             // List of variables
             List<dynamic> valuesToBeAdded = new List<dynamic>();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
 
             if (File.Exists(table))
             {
-                using (StreamWriter file = File.AppendText(table))
+                try
                 {
-                    for (int x = 1; x < splitWords.Length - 2; x++)
+                    using (StreamWriter file = new StreamWriter(table, append: true))
                     {
-                        // Cleaning value, and converting it to right value
-                        if (splitWords[x].Contains(",") || splitWords[x].Contains("(") || splitWords[x].Contains(")"))
+                        for (int x = 1; x < splitWords.Length - 2; x++)
                         {
-                            splitWords[x] = splitWords[x].Replace(",", "");
-                            splitWords[x] = splitWords[x].Replace("(", "");
-                            splitWords[x] = splitWords[x].Replace(")", "");
+                            // Cleaning value, and converting it to right value
+                            if (splitWords[x].Contains(",") || splitWords[x].Contains("(") || splitWords[x].Contains(")"))
+                            {
+                                splitWords[x] = splitWords[x].Replace(",", "");
+                                splitWords[x] = splitWords[x].Replace("(", "");
+                                splitWords[x] = splitWords[x].Replace(")", "");
 
-                            dynamic convertedValue = convertToType(splitWords[x], null);
-                            valuesToBeAdded.Add(convertedValue);
+                                dynamic convertedValue = convertToType(splitWords[x], null);
+                                valuesToBeAdded.Add(convertedValue);
 
-                            if (splitWords[x].Contains(")")) break;
+                                if (splitWords[x].Contains(")")) break;
+                            }
+                        }
+
+                        // Packaging value and sending it to table
+                        if (!isError)
+                        {
+                            row json = new row();
+                            json.values = valuesToBeAdded;
+                            var packagedValue = JsonConvert.SerializeObject(json);
+
+                            await file.WriteLineAsync(packagedValue);
+                            valuesToBeAdded.Clear();
+
+                            sys.send("Added values to table " + keyWords["INTO"]);
+                            res = "Added values to table " + keyWords["INTO"] + "\n";
+                        }
+                        else
+                        {
+                            valuesToBeAdded.Clear();
                         }
                     }
-
-                    // Packaging value and sending it to table
-                    if (!isError)
+                }
+                catch (Exception e)
+                {
+                    if (res == "")
                     {
-                        row json = new row();
-                        json.values = valuesToBeAdded;
-                        var packagedValue = JsonConvert.SerializeObject(json);
-
-                        file.WriteLine(packagedValue);
-                        file.Close();                      
-                        valuesToBeAdded.Clear();
-                            
-                        sys.send("Added values to table " + keyWords["INTO"]);
-                        res = "Added values to table " + keyWords["INTO"] + "\n";
+                        sys.send("Error inserting values to database");
+                        res = "Error inserting values to database";
                     }
-                    else
-                    {
-                        valuesToBeAdded.Clear();
-                    }
+                }
+                finally
+                {
+                    watch.Stop();
+                    var elapsedMs = watch.ElapsedMilliseconds;
+                    sys.send("Completed in " + elapsedMs + " milliseconds. \n");
                 }
             }
             else
@@ -394,8 +422,8 @@ namespace NoahSQL
             }
             catch (Exception e)
             {
-                Sys.send($"There was an error with uploading value {value} to table {tableName}. Current supported formats: INT (1,2,3,4) OR STR (\"\" OR '')");
-                res = $"There was an error with uploading value {value} to table {tableName}. Current supported formats: INT (1,2,3) OR STR (\"\" OR '')";
+                Sys.send($"There was an error with converting {value} to table {tableName}. Current supported formats: INT (1,2,3,4) OR STR (\"\" OR '')");
+                res = $"There was an error with converting {value} to table {tableName}. Current supported formats: INT (1,2,3) OR STR (\"\" OR '')";
                 isError = true;
                 return null;
             }
@@ -477,11 +505,7 @@ namespace NoahSQL
             // Check if a pattern of words have been fufilled
             if (keyWords["INSERT"] is string && keyWords["INTO"] is string)
             {
-                var watch = System.Diagnostics.Stopwatch.StartNew();
                 insertToTable(keyWords, splitWords);
-                watch.Stop();
-                var elapsedMs = watch.ElapsedMilliseconds;
-                sys.send("Completed in " + elapsedMs + " milliseconds. \n");
             }
             else if (keyWords["CREATE"] is string && keyWords["TABLE"] is string)
             {
@@ -501,11 +525,7 @@ namespace NoahSQL
             }
             else if (keyWords["DELETE"] is string && keyWords["FROM"] is string)
             {
-                var watch = System.Diagnostics.Stopwatch.StartNew();
                 deleteFromTable(splitWords, keyWords["WHERE"]);
-                watch.Stop();
-                var elapsedMs = watch.ElapsedMilliseconds;
-                sys.send("Completed in " + elapsedMs + "milliseconds. \n");
             }
         }
         public string returnMsg()
