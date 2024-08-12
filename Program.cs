@@ -8,7 +8,6 @@ using System.Threading;
 using System.IO;
 using System.Linq;
 using Microsoft.CSharp.RuntimeBinder;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace NoahSQL
 {
@@ -46,7 +45,7 @@ namespace NoahSQL
         static String DBName;
         static String tableName;
         static String table;
-        private static SemaphoreSlim semaphore = new SemaphoreSlim(1, 1);
+        private static SemaphoreSlim semaphore = new SemaphoreSlim(1, 10000);
 
         public static async void deleteFromTable(string[] splitWords, string WHERE)
         {
@@ -81,7 +80,6 @@ namespace NoahSQL
                         column preDefinedValues = JsonConvert.DeserializeObject<column>(line);
                         Dictionary<int, string> elementsToSearch = new Dictionary<int, string>();
 
-                        // Getting elements to search in each line of database
                         foreach (string preDefined in preDefinedValues.values.Keys)
                         {
                             if (preDefined == firstOperation) firstOperationElement = index;
@@ -149,10 +147,8 @@ namespace NoahSQL
             {
                 try
                 {
-                    // Check if it is single select statement
+                    // Check if it is single select || where statement
                     if (!SELECT.Contains(",")) selectStatements.Add(SELECT);
-
-                    // Check for multiple select statements
                     for (int x = 0; x < splitWords.Length; x++)
                     {
                         if (SELECT.Contains(","))
@@ -160,8 +156,6 @@ namespace NoahSQL
                             if (splitWords[x].Contains(",")) selectStatements.Add(splitWords[x].Replace(",", ""));
                             if (splitWords[x] == "FROM") selectStatements.Add(splitWords[x - 1]);
                         }
-
-                        // Check for WHERE operation statement
                         if (WHERE is string)
                         {
                             if (x == splitWords.Length - 1) secondOperation = convertToType(splitWords[x], null);
@@ -175,8 +169,6 @@ namespace NoahSQL
                         string line = await reader.ReadLineAsync();
                         column preDefinedValues = JsonConvert.DeserializeObject<column>(line);
                         Dictionary<int, string> elementsToSearch = new Dictionary<int, string>();
-
-                        // Getting elements to search in each line of database
                         foreach (string select in selectStatements)
                         {
                             int index = 0;
@@ -345,7 +337,9 @@ namespace NoahSQL
                             json.values = valuesToBeAdded;
                             var packagedValue = JsonConvert.SerializeObject(json);
 
+                            await semaphore.WaitAsync();
                             await file.WriteLineAsync(packagedValue);
+                            semaphore.Release();
                             valuesToBeAdded.Clear();
 
                             sys.send("Added values to table " + keyWords["INTO"]);
@@ -364,6 +358,7 @@ namespace NoahSQL
                         sys.send("Error inserting values to database");
                         res = "Error inserting values to database";
                     }
+                    semaphore.Release();
                 }
                 finally
                 {
@@ -609,7 +604,7 @@ namespace NoahSQL
         static void loadingMessage()
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("Booting up NoahSQL server..");
+            Console.WriteLine("Booting up NoahSQL servers..");
             Console.WriteLine("Hosting...");
             Thread.Sleep(2000);
             Console.ForegroundColor = ConsoleColor.Green;
@@ -656,7 +651,7 @@ namespace NoahSQL
             {
                 Console.ForegroundColor = ConsoleColor.Blue;
                 Console.WriteLine("Welcome to NoahSQL, user!");
-                Console.WriteLine("You are currently using NoahSQL BETA 1.0");
+                Console.WriteLine("You are currently using NoahSQL BETA 1.7");
                 Console.WriteLine("Currently, the NoahSQL Query Engine is still being built");
                 Console.WriteLine("\nLets get started, by creating a database: \n");
                 Console.ResetColor();
