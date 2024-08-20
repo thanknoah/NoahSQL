@@ -18,7 +18,7 @@ namespace NoahSQL
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"[SYSTEM]: {msg}");
-            Console.ResetColor();
+            Console.ForegroundColor = ConsoleColor.Magenta;
         }
     }
 
@@ -45,7 +45,7 @@ namespace NoahSQL
         static String DBName;
         static String tableName;
         static String table;
-        private static SemaphoreSlim semaphore = new SemaphoreSlim(1, 10000);
+        private static SemaphoreSlim semaphore = new SemaphoreSlim(1, 1000000);
 
         public static async void deleteFromTable(string[] splitWords, string WHERE)
         {
@@ -85,6 +85,7 @@ namespace NoahSQL
                             if (preDefined == firstOperation) firstOperationElement = index;
                             index++;
                         }
+
                         writer.WriteLine(line);
                         line = await reader.ReadLineAsync();
 
@@ -92,15 +93,8 @@ namespace NoahSQL
                         while ((line = await reader.ReadLineAsync()) != null)
                         {
                             row values = JsonConvert.DeserializeObject<row>(line);
-
-                            if (firstOperation is not string || secondOperation == null)
-                            {
-                                break;
-                            }
-                            if (values.values[firstOperationElement] != secondOperation)
-                            {
-                                writer.WriteLine(line);
-                            }
+                            if (firstOperation is not string || secondOperation == null) break;
+                            if (values.values[firstOperationElement] != secondOperation) writer.WriteLine(line);
                         }
                     }
 
@@ -141,6 +135,7 @@ namespace NoahSQL
             string firstOperation = null;
             dynamic secondOperation = null;
             int firstOperationElement = 0;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
 
             // Checking if table exists
             if (File.Exists(table))
@@ -235,16 +230,21 @@ namespace NoahSQL
                 sys.send($"Table {tableName} doesnt exists");
                 res = $"Table {tableName} doesnt exists";
             }
+
+            watch.Stop();
+            var elapsedMs = watch.ElapsedMilliseconds;
+            sys.send("Completed in " + elapsedMs + "milliseconds. \n");
         }
 
         public static void createNewTable(string[] splitWords)
         {
             // Variables
             JsonSerializer packagedValue = new JsonSerializer();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
             Dictionary<string, string> preDefinedValues = new Dictionary<string, string>();
             List<int> IDs = new List<int>();
             column json = new column();
-
+            
             int i = 0;
 
             // Checking if table exists
@@ -290,7 +290,7 @@ namespace NoahSQL
                         packagedValue.Serialize(file, json);
                         file.WriteLineAsync("\n");
                     }
-                    sys.send("Created Table " + tableName + " and inserted values.\n");
+                    sys.send("Created Table " + tableName + " and inserted values.");
                     res = "Created Table " + tableName + " and inserted values. \n";
                 }
             }
@@ -299,6 +299,10 @@ namespace NoahSQL
                 sys.send("Table already exists\n");
                 res = "Table already exists\n";
             }
+
+            watch.Stop();
+            var elapsedMs = watch.ElapsedMilliseconds;
+            sys.send("Completed in " + elapsedMs + "milliseconds. \n");
         }
 
 
@@ -358,6 +362,7 @@ namespace NoahSQL
                         sys.send("Error inserting values to database");
                         res = "Error inserting values to database";
                     }
+
                     semaphore.Release();
                 }
                 finally
@@ -371,8 +376,6 @@ namespace NoahSQL
             {
                 sys.send(keyWords["INTO"] + " is not a valid table");
                 res = keyWords["INTO"] + " is not a valid table.\n";
-
-                Console.WriteLine(table);
             }
         }
         public static dynamic convertToType(String value, dynamic returnValue)
@@ -392,12 +395,6 @@ namespace NoahSQL
                 firstReplace = "\"";
                 firstReplace = "\"";
                 secondReplace = "\"";
-            }
-
-            if (firstReplace == "" || secondReplace == "")
-            {
-                firstReplace = "";
-                secondReplace = "";
             }
 
             try
@@ -504,19 +501,11 @@ namespace NoahSQL
             }
             else if (keyWords["CREATE"] is string && keyWords["TABLE"] is string)
             {
-                var watch = System.Diagnostics.Stopwatch.StartNew();
-                createNewTable(splitWords);
-                watch.Stop();
-                var elapsedMs = watch.ElapsedMilliseconds;
-                sys.send("Completed in " + elapsedMs + "milliseconds. \n");
+                createNewTable(splitWords);                
             }
             else if (keyWords["SELECT"] is string && keyWords["FROM"] is string)
             {
-                var watch = System.Diagnostics.Stopwatch.StartNew();
                 searchEngine(splitWords, keyWords["SELECT"], keyWords["WHERE"]);
-                watch.Stop();
-                var elapsedMs = watch.ElapsedMilliseconds;
-                sys.send("Completed in " + elapsedMs + "milliseconds. \n");
             }
             else if (keyWords["DELETE"] is string && keyWords["FROM"] is string)
             {
@@ -557,10 +546,17 @@ namespace NoahSQL
         // Activates TCP listener
         static async void acceptConnection()
         {
-            while (true)
+            try
             {
-                TcpClient client = await SERVER.AcceptTcpClientAsync();
-                ThreadPool.QueueUserWorkItem(handle_connection, client);
+                while (true)
+                {
+                    TcpClient client = await SERVER.AcceptTcpClientAsync();
+                    ThreadPool.QueueUserWorkItem(handle_connection, client);
+                }
+            } catch (Exception e)
+            {
+                Sys sys = new Sys();
+                sys.send("There was an error accepting connections");
             }
         }
 
@@ -578,7 +574,6 @@ namespace NoahSQL
                 {
                     NetworkStream ns = client.GetStream();
                     var buffer = new byte[1024];
-
                     int received = await ns.ReadAsync(buffer);
                     var message = Encoding.UTF8.GetString(buffer, 0, received);
 
@@ -604,12 +599,15 @@ namespace NoahSQL
         static void loadingMessage()
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("Booting up NoahSQL servers..");
+            Console.WriteLine("Booting up NoahSQL V1.8 BETA server..");
             Console.WriteLine("Hosting...");
             Thread.Sleep(2000);
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("Succesfully hosted on " + (SERVER.LocalEndpoint).ToString() + "\n");
-            Console.ResetColor();
+            Console.ForegroundColor = ConsoleColor.Green;
+            Sys sys = new Sys();
+            sys.send("NOTE: If you need help with any commands, type --help\n");
+            Console.ForegroundColor = ConsoleColor.Magenta;
         }
 
         static void loadCommandLine()
@@ -619,6 +617,40 @@ namespace NoahSQL
             {
                 Console.WriteLine("Command: ");
                 string command = Console.ReadLine();
+
+                if (command == "--help")
+                {
+                    Console.WriteLine("\nList of console commands: \n");
+                    Console.WriteLine("--list (LISTS ALL TABLES)");
+                    Console.WriteLine("--details (LISTS DB DETAILS)");
+                    Console.WriteLine("--execute (EXECUTES SQL");
+                    Console.WriteLine("\nList of NoahSQL commands: \n");
+                    Console.WriteLine("CREATE TABLE [YOUR_TABLE_NAME]");
+                    Console.WriteLine("INSERT (str [VAL1], int [VAL2]) INTO [YOUR_TABLE_NAME]");
+                    Console.WriteLine("SELECT [VAL1], [VAL2] FROM [YOUR_TABLE_NAME]");
+                    Console.WriteLine("SELECT [VAL1], [VAL2] FROM [YOUR_TABLE_NAME] WHERE [VAL] = [VAL]");
+                    Console.WriteLine("DELETE FROM [YOUR_TABLE_NAME]");
+                    Console.WriteLine("DELETE FROM [YOUR_TABLE_NAME] WHERE [VAL] = [VAL]");
+                    Console.WriteLine("\n");
+                }
+
+                if (command == "--list")
+                {
+                    Console.WriteLine("\nList of tables: \n");
+
+                    string DBDir = Directory.GetCurrentDirectory() + @"\" + DB_NAME;
+                    string[] tableList = Directory.GetFiles(DBDir, "*.*", SearchOption.AllDirectories);
+
+                    foreach (string tableDir in tableList)
+                    {
+                        string tableName = Path.GetFileName(tableDir);
+                        string toRemove = ".json";
+                        string result = tableName.Replace(toRemove, string.Empty);
+
+                        Console.WriteLine(result);
+                    }
+                    Console.WriteLine("\n");
+                }
 
                 if (command == "--details")
                 {
@@ -651,8 +683,8 @@ namespace NoahSQL
             {
                 Console.ForegroundColor = ConsoleColor.Blue;
                 Console.WriteLine("Welcome to NoahSQL, user!");
-                Console.WriteLine("You are currently using NoahSQL BETA 1.7");
-                Console.WriteLine("Currently, the NoahSQL Query Engine is still being built");
+                Console.WriteLine("You are currently using NoahSQL BETA V1.8");
+                Console.WriteLine("Currently, this product is been finalised");
                 Console.WriteLine("\nLets get started, by creating a database: \n");
                 Console.ResetColor();
 
