@@ -1,5 +1,4 @@
-BETA V1.7
+BETA V1.8
 
-- Added DELETE functions to tables
-- Added a lock file system
-- Fixed a bug to do with SELECT statement
+- NEW TERMINAL COMMANDS
+- SAFER FILE MANAGEMENT SYSTEM
